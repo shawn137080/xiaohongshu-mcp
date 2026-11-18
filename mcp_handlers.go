@@ -162,6 +162,7 @@ func (s *AppServer) handlePublishContent(ctx context.Context, args map[string]in
 	visibility := parseVisibility(args)
 
 	isOriginal, _ := args["is_original"].(bool)
+	aiContent, _ := args["ai_content"].(bool)
 
 	logrus.Infof("MCP: 发布内容 - 标题: %s, 图片数量: %d, 标签数量: %d, @人数: %d, 定时: %s, 原创: %v, visibility: %s, 商品: %v", title, len(imagePaths), len(tags), len(atUsers), scheduleAt, isOriginal, visibility, products)
 
@@ -173,6 +174,7 @@ func (s *AppServer) handlePublishContent(ctx context.Context, args map[string]in
 		AtUsers:    atUsers,
 		ScheduleAt: scheduleAt,
 		IsOriginal: isOriginal,
+		AIContent:  aiContent,
 		Visibility: visibility,
 		Products:   products,
 	}
@@ -204,6 +206,7 @@ func (s *AppServer) handlePublishVideo(ctx context.Context, args map[string]inte
 	title, _ := args["title"].(string)
 	content, _ := args["content"].(string)
 	videoPath, _ := args["video"].(string)
+	cover, _ := args["cover"].(string)
 	tagsInterface, _ := args["tags"].([]interface{})
 	productsInterface, _ := args["products"].([]interface{})
 
@@ -234,6 +237,7 @@ func (s *AppServer) handlePublishVideo(ctx context.Context, args map[string]inte
 	scheduleAt, _ := args["schedule_at"].(string)
 	visibility := parseVisibility(args)
 	isOriginal, _ := args["is_original"].(bool)
+	aiContent, _ := args["ai_content"].(bool)
 
 	logrus.Infof("MCP: 发布视频 - 标题: %s, 标签数量: %d, 定时: %s, 原创: %v, visibility: %s, 商品: %v", title, len(tags), scheduleAt, isOriginal, visibility, products)
 
@@ -241,9 +245,11 @@ func (s *AppServer) handlePublishVideo(ctx context.Context, args map[string]inte
 		Title:      title,
 		Content:    content,
 		Video:      videoPath,
+		Cover:      cover,
 		Tags:       tags,
 		ScheduleAt: scheduleAt,
 		IsOriginal: isOriginal,
+		AIContent:  aiContent,
 		Visibility: visibility,
 		Products:   products,
 	}
