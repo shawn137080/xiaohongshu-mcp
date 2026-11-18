@@ -91,7 +91,7 @@ func setVideoCover(page *rod.Page, coverPath string) error {
   const root = document.querySelector('.cover-plugin-preview');
   const cover = root && root.querySelector('.cover > .default');
   const style = cover && cover.getAttribute('style');
-  return root && root.getAttribute('aria-busy') === 'false' && style && style !== before &&
+  return root && root.getAttribute('aria-busy') !== 'true' && style && style !== before &&
    /background-image:\s*url\(/.test(style) && !root.textContent.includes('封面上传中');
  }`, before))
 }

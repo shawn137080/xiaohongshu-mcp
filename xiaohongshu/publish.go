@@ -1512,7 +1512,8 @@ func clickScheduleSwitch(page *rod.Page) error {
 // setDateTime 设置日期时间
 func setDateTime(ctx context.Context, page *rod.Page, t time.Time) error {
 	// 海外编辑页仍标注北京时间，不能直接填调用方的本地墙上时间。
-	zone, err := page.ElementR(".date-picker-container .d-datepicker-suffix", "北京时间")
+	pp := page.Timeout(15 * time.Second)
+	zone, err := pp.ElementR(".post-time-wrapper", "北京时间|Asia/Shanghai")
 	if err != nil {
 		return errors.Wrap(err, "无法确认定时控件时区，中止发布")
 	}
@@ -1521,7 +1522,7 @@ func setDateTime(ctx context.Context, page *rod.Page, t time.Time) error {
 	}
 	dateTimeStr := creatorScheduleTime(t)
 
-	elem, err := page.Element(".date-picker-container input")
+	elem, err := pp.Element(".post-time-wrapper input:not([type=checkbox])")
 	if err != nil {
 		return errors.Wrap(err, "查找日期时间输入框失败")
 	}
@@ -1533,6 +1534,9 @@ func setDateTime(ctx context.Context, page *rod.Page, t time.Time) error {
 	}
 	if err := humanize.Type(ctx, elem, dateTimeStr); err != nil {
 		return errors.Wrap(err, "输入日期时间失败")
+	}
+	if err := page.Keyboard.Press(input.Enter); err != nil {
+		return err
 	}
 	if err := page.Keyboard.Press(input.Tab); err != nil {
 		return err

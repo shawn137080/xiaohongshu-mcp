@@ -87,7 +87,7 @@ func (s *AppServer) handleGetLoginQrcode(ctx context.Context) *MCPToolResult {
 
 	// 已登录：文本 + 图片
 	contents := []MCPContent{
-		{Type: "text", Text: "请用小红书 App 在 " + deadline + " 前扫码登录 👇"},
+		{Type: "text", Text: "请用 RedNote App 在 " + deadline + " 前扫码登录 👇"},
 		{
 			Type:     "image",
 			MimeType: "image/png",

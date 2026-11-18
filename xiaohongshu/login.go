@@ -90,9 +90,16 @@ func (a *LoginAction) FetchQrcodeImage(ctx context.Context) (string, bool, error
 	if err := toggle.Click("left", 1); err != nil {
 		return "", false, err
 	}
+	// 图片加载期间会重建节点，每次重新查询，不能等已被移除的旧 img。
+	if err := pp.Wait(rod.Eval(`() => {
+  const qr = document.querySelector('img.css-1lhmg90');
+  return qr && !!qr.getAttribute('src') && qr.complete && qr.naturalWidth > 0;
+ }`)); err != nil {
+		return "", false, errors.Wrap(err, "等待 RedNote 二维码图片失败")
+	}
 	qr, err := pp.Element("img.css-1lhmg90")
 	if err != nil {
-		return "", false, errors.Wrap(err, "未找到 RedNote 二维码")
+		return "", false, err
 	}
 	src, err := qr.Attribute("src")
 	if err != nil {

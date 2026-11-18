@@ -18,7 +18,7 @@ func boolPtr(b bool) *bool { return &b }
 
 // PublishContentArgs 发布内容的参数
 type PublishContentArgs struct {
-	Title      string   `json:"title" jsonschema:"内容标题（小红书限制：最多20个中文字或英文单词）"`
+	Title      string   `json:"title" jsonschema:"内容标题（RedNote 限制：最多20个中文字或英文单词）"`
 	Content    string   `json:"content" jsonschema:"正文内容，不包含以#开头的标签内容，所有话题标签都用tags参数来生成和提供即可"`
 	Images     []string `json:"images" jsonschema:"图片路径列表（至少需要1张图片）。支持两种方式：1. HTTP/HTTPS图片链接（自动下载）；2. 本地图片绝对路径（推荐，如:/Users/user/image.jpg）"`
 	Tags       []string `json:"tags,omitempty" jsonschema:"话题标签列表（可选参数），如 [美食, 旅行, 生活]"`
@@ -33,7 +33,7 @@ type PublishContentArgs struct {
 // PublishVideoArgs 发布视频的参数（仅支持本地单个视频文件）
 type PublishVideoArgs struct {
 	Cover      string   `json:"cover,omitempty" jsonschema:"自定义视频封面，本地PNG或JPEG绝对路径，可选"`
-	Title      string   `json:"title" jsonschema:"内容标题（小红书限制：最多20个中文字或英文单词）"`
+	Title      string   `json:"title" jsonschema:"内容标题（RedNote 限制：最多20个中文字或英文单词）"`
 	Content    string   `json:"content" jsonschema:"正文内容，不包含以#开头的标签内容，所有话题标签都用tags参数来生成和提供即可"`
 	Video      string   `json:"video" jsonschema:"本地视频绝对路径（仅支持单个视频文件，如:/Users/user/video.mp4）"`
 	Tags       []string `json:"tags,omitempty" jsonschema:"话题标签列表（可选参数），如 [美食, 旅行, 生活]"`
@@ -191,7 +191,7 @@ func registerTools(server *mcp.Server, appServer *AppServer) {
 	mcp.AddTool(server,
 		&mcp.Tool{
 			Name:        "check_login_status",
-			Description: "检查小红书登录状态",
+			Description: "检查海外 RedNote 创作者中心登录状态",
 			Annotations: &mcp.ToolAnnotations{
 				Title:        "Check Login Status",
 				ReadOnlyHint: true,
@@ -207,7 +207,7 @@ func registerTools(server *mcp.Server, appServer *AppServer) {
 	mcp.AddTool(server,
 		&mcp.Tool{
 			Name:        "get_login_qrcode",
-			Description: "获取登录二维码（返回 Base64 图片和超时时间）",
+			Description: "获取海外 RedNote 登录二维码（返回 Base64 图片和超时时间）",
 			Annotations: &mcp.ToolAnnotations{
 				Title:        "Get Login QR Code",
 				ReadOnlyHint: true,
@@ -247,7 +247,7 @@ func registerTools(server *mcp.Server, appServer *AppServer) {
 	mcp.AddTool(server,
 		&mcp.Tool{
 			Name:        "publish_content",
-			Description: "发布小红书图文内容",
+			Description: "发布海外 RedNote 图文内容",
 			InputSchema: publishContentSchema,
 			Annotations: &mcp.ToolAnnotations{
 				Title:           "Publish Content",

@@ -58,29 +58,31 @@ func NewPublishVideoAction(page *rod.Page) (*PublishAction, error) {
 	return &PublishAction{page: pp}, nil
 }
 
-// PublishVideo 上传视频并提交
+// PublishVideo 准备内容通过后才提交；实测可以只运行准备阶段。
 func (p *PublishAction) PublishVideo(ctx context.Context, content PublishVideoContent) error {
+	page := p.page.Context(ctx).Timeout(30 * time.Minute)
+	if err := p.prepareVideo(page.GetContext(), page, content); err != nil {
+		return err
+	}
+	if err := clickPublishButton(page); err != nil {
+		return err
+	}
+	return waitPublishSuccess(page, 15*time.Second)
+}
+
+func (p *PublishAction) prepareVideo(ctx context.Context, page *rod.Page, content PublishVideoContent) error {
 	if content.VideoPath == "" {
 		return errors.New("视频不能为空")
 	}
-
-	// 大视频上传和处理可超过五分钟，整次发布共用三十分钟上限。
-	page := p.page.Context(ctx).Timeout(30 * time.Minute)
-
 	if err := uploadVideo(page, content.VideoPath); err != nil {
-		return errors.Wrap(err, "小红书上传视频失败")
+		return errors.Wrap(err, "RedNote 上传视频失败")
 	}
-
 	if content.CoverPath != "" {
 		if err := setVideoCover(page, content.CoverPath); err != nil {
 			return errors.Wrap(err, "自定义封面设置失败，中止发布")
 		}
 	}
-
-	if err := submitPublishVideo(ctx, page, content.Title, content.Content, content.Tags, content.ScheduleTime, content.IsOriginal, content.AIContent, content.Visibility, content.Products); err != nil {
-		return errors.Wrap(err, "小红书发布失败")
-	}
-	return nil
+	return fillPublishVideo(ctx, page, content.Title, content.Content, content.Tags, content.ScheduleTime, content.IsOriginal, content.AIContent, content.Visibility, content.Products)
 }
 
 // uploadVideo 上传单个本地视频
@@ -113,8 +115,8 @@ func uploadVideo(page *rod.Page, videoPath string) error {
 	return nil
 }
 
-// submitPublishVideo 填写标题、正文、标签并点击发布（等待按钮可点击后再提交）
-func submitPublishVideo(ctx context.Context, page *rod.Page, title, content string, tags []string, scheduleTime *time.Time, isOriginal bool, aiContent bool, visibility string, products []string) error {
+// fillPublishVideo 填写并校验所有发布选项，不提交。
+func fillPublishVideo(ctx context.Context, page *rod.Page, title, content string, tags []string, scheduleTime *time.Time, isOriginal bool, aiContent bool, visibility string, products []string) error {
 	// 标题
 	titleElem, err := page.Element("div.d-input input")
 	if err != nil {
@@ -177,10 +179,5 @@ func submitPublishVideo(ctx context.Context, page *rod.Page, title, content stri
 		return errors.Wrap(err, "绑定商品失败")
 	}
 
-	if err := clickPublishButton(page); err != nil {
-		return err
-	}
-
-	// 校验发布真的成功（成功跳转离开发布页），未跳转判失败——消除假成功
-	return waitPublishSuccess(page, 15*time.Second)
+	return nil
 }

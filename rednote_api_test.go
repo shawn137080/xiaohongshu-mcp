@@ -52,3 +52,16 @@ func TestRednoteVideoCoverThroughMCPAndHTTP(t *testing.T) {
 	require.Equal(t, http.StatusInternalServerError, recorder.Code)
 	require.Contains(t, recorder.Body.String(), "封面必须使用本地绝对路径")
 }
+
+func TestHealthIdentifiesRednote(t *testing.T) {
+	recorder := httptest.NewRecorder()
+	setupRoutes(NewAppServer(NewXiaohongshuService(), "")).ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/health", nil))
+	require.Equal(t, http.StatusOK, recorder.Code)
+	var result struct {
+		Data map[string]any `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &result))
+	require.Equal(t, "rednote-mcp", result.Data["service"])
+	require.Equal(t, "rednote", result.Data["platform"])
+	require.Equal(t, "https://creator.rednote.com", result.Data["creator_url"])
+}

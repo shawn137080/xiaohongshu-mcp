@@ -60,6 +60,8 @@ func TestRednoteCoverLocal(t *testing.T) {
      <div class="upload-wrapper" style="display:none"><input type="file" accept="image/png"></div>
      <div class="d-modal-footer"><button class="btn-confirm" disabled>确定</button></div></div>`)
 			page.MustEval(`ok => {
+    // 海外页面的另一种布局没有 aria-busy，仍需等地址更新。
+    if(ok) document.querySelector('.cover-plugin-preview').removeAttribute('aria-busy');
     const modal=document.querySelector('#modal');
     document.querySelector('.cover-edit-entry').onclick=()=>modal.style.display='block';
     document.querySelector('h6').onclick=()=>document.querySelector('.upload-wrapper').style.display='block';
@@ -70,7 +72,7 @@ func TestRednoteCoverLocal(t *testing.T) {
      root.setAttribute('aria-busy','true');
      if(ok) setTimeout(()=>{
       document.querySelector('.default').style.backgroundImage="url('uploaded.png')";
-      root.setAttribute('aria-busy','false');
+      root.removeAttribute('aria-busy');
      },100);
     };
    }`, uploadOK)
@@ -90,11 +92,26 @@ func TestRednoteCoverLocal(t *testing.T) {
 
 func TestRednoteScheduleLocal(t *testing.T) {
 	b := newMentionFixtureBrowser(t)
-	page := b.MustPage("about:blank").Timeout(10 * time.Second)
+	for _, label := range []string{"北京时间", "Asia/Shanghai"} {
+		t.Run(label, func(t *testing.T) {
+			page := b.MustPage("about:blank").Timeout(10 * time.Second)
+			defer page.Close()
+			page.MustSetDocumentContent(`<div class="post-time-wrapper"><input type="checkbox"><input value="2026-11-18 10:00"><span>` + label + `</span></div><button>blur</button>`)
+			value, err := time.Parse(time.RFC3339, "2026-11-19T10:30:00-05:00")
+			require.NoError(t, err)
+			require.NoError(t, setDateTime(page.GetContext(), page, value))
+			require.Equal(t, "2026-11-19 23:30", page.MustElement("input:not([type=checkbox])").MustProperty("value").String())
+		})
+	}
+}
+
+func TestRednoteFillDoesNotSubmitLocal(t *testing.T) {
+	b := newMentionFixtureBrowser(t)
+	page := b.MustPage("about:blank").Timeout(15 * time.Second)
 	defer page.Close()
-	page.MustSetDocumentContent(`<div class="date-picker-container"><input value="2026-11-18 10:00"><div class="d-datepicker-suffix">北京时间</div></div><button>blur</button>`)
-	value, err := time.Parse(time.RFC3339, "2026-11-19T10:30:00-05:00")
-	require.NoError(t, err)
-	require.NoError(t, setDateTime(page.GetContext(), page, value))
-	require.Equal(t, "2026-11-19 23:30", page.MustElement("input").MustProperty("value").String())
+	page.MustSetDocumentContent(`<div class="d-input"><input></div><div class="tiptap" role="textbox" contenteditable="true" style="height:80px"></div><div class="publish-page-publish-btn"><button class="bg-red" onclick="document.body.dataset.submitted='true'">发布</button></div>`)
+	require.NoError(t, fillPublishVideo(page.GetContext(), page, "测试", "正文", nil, nil, false, false, "", nil))
+	require.Equal(t, "测试", page.MustElement("input").MustProperty("value").String())
+	require.Equal(t, "正文", page.MustElement(".tiptap").MustText())
+	require.False(t, page.MustEval(`()=>document.body.dataset.submitted === 'true'`).Bool())
 }
