@@ -19,7 +19,7 @@ type sessionFile struct {
 }
 
 // localCookiesPath 当前目录下的默认文件名。
-const localCookiesPath = "cookies.json"
+const localCookiesPath = "rednote-cookies.json"
 
 type Cookier interface {
 	LoadCookies() ([]byte, error)
@@ -112,7 +112,7 @@ func (c *localCookie) write(cks []byte, seed int) error {
 		}
 	}
 
-	return os.WriteFile(c.path, data, 0644)
+	return os.WriteFile(c.path, data, 0600)
 }
 
 // DeleteCookies 删除 cookies 文件。
@@ -124,25 +124,10 @@ func (c *localCookie) DeleteCookies() error {
 	return os.Remove(c.path)
 }
 
-// GetCookiesFilePath 获取 cookies 文件路径。
-// 为了向后兼容，如果旧路径 /tmp/cookies.json 存在，则继续使用；
-// 否则使用当前目录下的 cookies.json
+// GetCookiesFilePath 隔离海外会话，不复用大陆版或 /tmp 的 cookies。
 func GetCookiesFilePath() string {
-	// 显式指定优先，无条件——环境里的残留文件不能盖掉用户明说的配置
 	if path := os.Getenv("COOKIES_PATH"); path != "" {
 		return path
 	}
-
-	// 本地目录
-	if _, err := os.Stat(localCookiesPath); err == nil {
-		return localCookiesPath
-	}
-
-	// 旧路径 /tmp/cookies.json，仅为老用户兜底
-	oldPath := filepath.Join(os.TempDir(), "cookies.json")
-	if _, err := os.Stat(oldPath); err == nil {
-		return oldPath
-	}
-
 	return localCookiesPath
 }

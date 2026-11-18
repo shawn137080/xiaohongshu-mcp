@@ -1,3 +1,8 @@
+> **RedNote overseas publishing fork**
+>
+> 本分支面向 `creator.rednote.com`，支持自定义视频封面和 AI 内容声明。
+> 安装、接口、验收范围与未验证项见 [docs/REDNOTE.md](docs/REDNOTE.md)。以下保留上游文档，不代表所有上游功能均适用于海外版。
+
 # xiaohongshu-mcp
 
 <!-- ALL-CONTRIBUTORS-BADGE:START - Do not remove or modify this section -->

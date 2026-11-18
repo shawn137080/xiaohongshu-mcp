@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"flag"
+	"time"
 
 	"github.com/go-rod/rod"
 	"github.com/sirupsen/logrus"
@@ -30,8 +31,10 @@ func main() {
 	defer page.Close()
 
 	action := xiaohongshu.NewLogin(page)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancel()
 
-	status, err := action.CheckLoginStatus(context.Background())
+	status, err := action.CheckLoginStatus(ctx)
 	if err != nil {
 		logrus.Fatalf("failed to check login status: %v", err)
 	}
@@ -44,7 +47,7 @@ func main() {
 
 	// 开始登录流程
 	logrus.Info("开始登录流程...")
-	if err = action.Login(context.Background()); err != nil {
+	if err = action.Login(ctx); err != nil {
 		logrus.Fatalf("登录失败: %v", err)
 	} else {
 		if err := saveCookies(page); err != nil {
@@ -53,7 +56,7 @@ func main() {
 	}
 
 	// 再次检查登录状态确认成功
-	status, err = action.CheckLoginStatus(context.Background())
+	status, err = action.CheckLoginStatus(ctx)
 	if err != nil {
 		logrus.Fatalf("failed to check login status after login: %v", err)
 	}

@@ -17,8 +17,10 @@ type PublishVideoContent struct {
 	Title        string
 	Content      string
 	Tags         []string
+	CoverPath    string
 	VideoPath    string
 	ScheduleTime *time.Time // 定时发布时间，nil 表示立即发布
+	AIContent    bool       // 笔记含 AI 合成内容
 	IsOriginal   bool       // 是否声明原创
 	Visibility   string     // 可见范围: "公开可见"(默认), "仅自己可见", "仅互关好友可见"
 	Products     []string   // 商品关键词列表，用于绑定带货商品
@@ -56,28 +58,36 @@ func NewPublishVideoAction(page *rod.Page) (*PublishAction, error) {
 	return &PublishAction{page: pp}, nil
 }
 
-// PublishVideo 上传视频并提交
+// PublishVideo 准备内容通过后才提交；实测可以只运行准备阶段。
 func (p *PublishAction) PublishVideo(ctx context.Context, content PublishVideoContent) error {
+	page := p.page.Context(ctx).Timeout(30 * time.Minute)
+	if err := p.prepareVideo(page.GetContext(), page, content); err != nil {
+		return err
+	}
+	if err := clickPublishButton(page); err != nil {
+		return err
+	}
+	return waitPublishSuccess(page, 15*time.Second)
+}
+
+func (p *PublishAction) prepareVideo(ctx context.Context, page *rod.Page, content PublishVideoContent) error {
 	if content.VideoPath == "" {
 		return errors.New("视频不能为空")
 	}
-
-	// 重设超时：.Context(ctx) 会替换掉 NewPublishVideoAction 里 Timeout(300s) 的 deadline
-	page := p.page.Context(ctx).Timeout(300 * time.Second)
-
 	if err := uploadVideo(page, content.VideoPath); err != nil {
-		return errors.Wrap(err, "小红书上传视频失败")
+		return errors.Wrap(err, "RedNote 上传视频失败")
 	}
-
-	if err := submitPublishVideo(ctx, page, content.Title, content.Content, content.Tags, content.ScheduleTime, content.IsOriginal, content.Visibility, content.Products); err != nil {
-		return errors.Wrap(err, "小红书发布失败")
+	if content.CoverPath != "" {
+		if err := setVideoCover(page, content.CoverPath); err != nil {
+			return errors.Wrap(err, "自定义封面设置失败，中止发布")
+		}
 	}
-	return nil
+	return fillPublishVideo(ctx, page, content.Title, content.Content, content.Tags, content.ScheduleTime, content.IsOriginal, content.AIContent, content.Visibility, content.Products)
 }
 
 // uploadVideo 上传单个本地视频
 func uploadVideo(page *rod.Page, videoPath string) error {
-	pp := page.Timeout(5 * time.Minute) // 视频处理耗时更长
+	pp := page.Timeout(30 * time.Minute) // 视频处理耗时更长
 
 	if _, err := os.Stat(videoPath); os.IsNotExist(err) {
 		return errors.Wrapf(err, "视频文件不存在: %s", videoPath)
@@ -97,7 +107,7 @@ func uploadVideo(page *rod.Page, videoPath string) error {
 	fileInput.MustSetFiles(videoPath)
 
 	// 对于视频，等待发布按钮变为可点击即表示处理完成
-	btn, err := waitForPublishButtonClickable(pp, 10*time.Minute)
+	btn, err := waitForPublishButtonClickable(pp, 30*time.Minute)
 	if err != nil {
 		return err
 	}
@@ -105,8 +115,8 @@ func uploadVideo(page *rod.Page, videoPath string) error {
 	return nil
 }
 
-// submitPublishVideo 填写标题、正文、标签并点击发布（等待按钮可点击后再提交）
-func submitPublishVideo(ctx context.Context, page *rod.Page, title, content string, tags []string, scheduleTime *time.Time, isOriginal bool, visibility string, products []string) error {
+// fillPublishVideo 填写并校验所有发布选项，不提交。
+func fillPublishVideo(ctx context.Context, page *rod.Page, title, content string, tags []string, scheduleTime *time.Time, isOriginal bool, aiContent bool, visibility string, products []string) error {
 	// 标题
 	titleElem, err := page.Element("div.d-input input")
 	if err != nil {
@@ -158,15 +168,16 @@ func submitPublishVideo(ctx context.Context, page *rod.Page, title, content stri
 		slog.Info("已声明原创")
 	}
 
+	if aiContent {
+		if err := setAIContent(page); err != nil {
+			return errors.Wrap(err, "AI 声明设置失败，中止发布")
+		}
+	}
+
 	// 绑定商品
 	if err := bindProducts(ctx, page, products); err != nil {
 		return errors.Wrap(err, "绑定商品失败")
 	}
 
-	if err := clickPublishButton(page); err != nil {
-		return err
-	}
-
-	// 校验发布真的成功（成功跳转离开发布页），未跳转判失败——消除假成功
-	return waitPublishSuccess(page, 15*time.Second)
+	return nil
 }

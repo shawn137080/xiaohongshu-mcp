@@ -18,12 +18,13 @@ func boolPtr(b bool) *bool { return &b }
 
 // PublishContentArgs 发布内容的参数
 type PublishContentArgs struct {
-	Title      string   `json:"title" jsonschema:"内容标题（小红书限制：最多20个中文字或英文单词）"`
+	Title      string   `json:"title" jsonschema:"内容标题（RedNote 限制：最多20个中文字或英文单词）"`
 	Content    string   `json:"content" jsonschema:"正文内容，不包含以#开头的标签内容，所有话题标签都用tags参数来生成和提供即可"`
 	Images     []string `json:"images" jsonschema:"图片路径列表（至少需要1张图片）。支持两种方式：1. HTTP/HTTPS图片链接（自动下载）；2. 本地图片绝对路径（推荐，如:/Users/user/image.jpg）"`
 	Tags       []string `json:"tags,omitempty" jsonschema:"话题标签列表（可选参数），如 [美食, 旅行, 生活]"`
 	AtUsers    []string `json:"at_users,omitempty" jsonschema:"需要@的用户列表（可选），如 [小明, 小红|0123456789abcdef01234567, 0123456789abcdef01234567]。支持 昵称、昵称|user_id、user_id 三种写法（纯 id 会当查询词搜索并取第一个候选，插入后校验 userId）。找不到同名用户时退化为纯文本 @昵称，不会阻断发布"`
 	ScheduleAt string   `json:"schedule_at,omitempty" jsonschema:"定时发布时间（可选），ISO8601格式如 2024-01-20T10:30:00+08:00，支持1小时至14天内。不填则立即发布"`
+	AIContent  bool     `json:"ai_content,omitempty" jsonschema:"是否声明笔记含AI合成内容，true时必须成功设置才发布"`
 	IsOriginal bool     `json:"is_original,omitempty" jsonschema:"是否声明原创（可选），true为声明原创，false或不填则不声明"`
 	Visibility string   `json:"visibility,omitempty" jsonschema:"可见范围（可选），支持: 公开可见(默认)、仅自己可见、仅互关好友可见。不填则默认公开可见"`
 	Products   []string `json:"products,omitempty" jsonschema:"商品关键词列表（可选），用于绑定带货商品。填写商品名称或商品ID，系统会自动搜索并选择第一个匹配结果。需账号已开通商品功能。示例: [面膜, 防晒霜SPF50]"`
@@ -31,11 +32,13 @@ type PublishContentArgs struct {
 
 // PublishVideoArgs 发布视频的参数（仅支持本地单个视频文件）
 type PublishVideoArgs struct {
-	Title      string   `json:"title" jsonschema:"内容标题（小红书限制：最多20个中文字或英文单词）"`
+	Cover      string   `json:"cover,omitempty" jsonschema:"自定义视频封面，本地PNG或JPEG绝对路径，可选"`
+	Title      string   `json:"title" jsonschema:"内容标题（RedNote 限制：最多20个中文字或英文单词）"`
 	Content    string   `json:"content" jsonschema:"正文内容，不包含以#开头的标签内容，所有话题标签都用tags参数来生成和提供即可"`
 	Video      string   `json:"video" jsonschema:"本地视频绝对路径（仅支持单个视频文件，如:/Users/user/video.mp4）"`
 	Tags       []string `json:"tags,omitempty" jsonschema:"话题标签列表（可选参数），如 [美食, 旅行, 生活]"`
 	ScheduleAt string   `json:"schedule_at,omitempty" jsonschema:"定时发布时间（可选），ISO8601格式如 2024-01-20T10:30:00+08:00，支持1小时至14天内。不填则立即发布"`
+	AIContent  bool     `json:"ai_content,omitempty" jsonschema:"是否声明笔记含AI合成内容，true时必须成功设置才发布"`
 	IsOriginal bool     `json:"is_original,omitempty" jsonschema:"是否声明原创（可选），true为声明原创，false或不填则不声明"`
 	Visibility string   `json:"visibility,omitempty" jsonschema:"可见范围（可选），支持: 公开可见(默认)、仅自己可见、仅互关好友可见。不填则默认公开可见"`
 	Products   []string `json:"products,omitempty" jsonschema:"商品关键词列表（可选），用于绑定带货商品。填写商品名称或商品ID，系统会自动搜索并选择第一个匹配结果。需账号已开通商品功能。示例: [面膜, 防晒霜SPF50]"`
@@ -132,7 +135,7 @@ func InitMCPServer(appServer *AppServer) *mcp.Server {
 	// 创建 MCP Server
 	server := mcp.NewServer(
 		&mcp.Implementation{
-			Name:    "xiaohongshu-mcp",
+			Name:    "rednote-mcp",
 			Version: "2.0.0",
 		},
 		nil,
@@ -140,6 +143,10 @@ func InitMCPServer(appServer *AppServer) *mcp.Server {
 
 	// 注册所有工具
 	registerTools(server, appServer)
+	// 海外发布版不暴露尚未适配的大陆站操作。
+	server.RemoveTools("list_feeds", "search_feeds", "get_feed_detail", "user_profile",
+		"post_comment_to_feed", "reply_comment_in_feed", "like_feed", "favorite_feed",
+		"get_my_profile", "get_unread_count", "list_notifications", "reply_notification", "like_notification")
 
 	logrus.Info("MCP Server initialized with official SDK")
 
@@ -184,7 +191,7 @@ func registerTools(server *mcp.Server, appServer *AppServer) {
 	mcp.AddTool(server,
 		&mcp.Tool{
 			Name:        "check_login_status",
-			Description: "检查小红书登录状态",
+			Description: "检查海外 RedNote 创作者中心登录状态",
 			Annotations: &mcp.ToolAnnotations{
 				Title:        "Check Login Status",
 				ReadOnlyHint: true,
@@ -200,7 +207,7 @@ func registerTools(server *mcp.Server, appServer *AppServer) {
 	mcp.AddTool(server,
 		&mcp.Tool{
 			Name:        "get_login_qrcode",
-			Description: "获取登录二维码（返回 Base64 图片和超时时间）",
+			Description: "获取海外 RedNote 登录二维码（返回 Base64 图片和超时时间）",
 			Annotations: &mcp.ToolAnnotations{
 				Title:        "Get Login QR Code",
 				ReadOnlyHint: true,
@@ -240,7 +247,7 @@ func registerTools(server *mcp.Server, appServer *AppServer) {
 	mcp.AddTool(server,
 		&mcp.Tool{
 			Name:        "publish_content",
-			Description: "发布小红书图文内容",
+			Description: "发布海外 RedNote 图文内容",
 			InputSchema: publishContentSchema,
 			Annotations: &mcp.ToolAnnotations{
 				Title:           "Publish Content",
@@ -257,6 +264,7 @@ func registerTools(server *mcp.Server, appServer *AppServer) {
 				"at_users":    convertStringsToInterfaces(args.AtUsers),
 				"schedule_at": args.ScheduleAt,
 				"is_original": args.IsOriginal,
+				"ai_content":  args.AIContent,
 				"visibility":  args.Visibility,
 				"products":    convertStringsToInterfaces(args.Products),
 			}
@@ -418,7 +426,7 @@ func registerTools(server *mcp.Server, appServer *AppServer) {
 	mcp.AddTool(server,
 		&mcp.Tool{
 			Name:        "publish_with_video",
-			Description: "发布小红书视频内容（仅支持本地单个视频文件）",
+			Description: "发布 RedNote 视频，可设置自定义封面和 AI 内容声明（本地视频最大 1 GiB）",
 			Annotations: &mcp.ToolAnnotations{
 				Title:           "Publish Video",
 				DestructiveHint: boolPtr(true),
@@ -429,9 +437,11 @@ func registerTools(server *mcp.Server, appServer *AppServer) {
 				"title":       args.Title,
 				"content":     args.Content,
 				"video":       args.Video,
+				"cover":       args.Cover,
 				"tags":        convertStringsToInterfaces(args.Tags),
 				"schedule_at": args.ScheduleAt,
 				"is_original": args.IsOriginal,
+				"ai_content":  args.AIContent,
 				"visibility":  args.Visibility,
 				"products":    convertStringsToInterfaces(args.Products),
 			}

@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
 	"time"
 
 	"github.com/go-rod/rod"
@@ -36,6 +35,7 @@ type PublishRequest struct {
 	Tags       []string `json:"tags,omitempty"`
 	AtUsers    []string `json:"at_users,omitempty"`    // 需要 @ 的用户昵称列表
 	ScheduleAt string   `json:"schedule_at,omitempty"` // 定时发布时间，ISO8601格式，为空则立即发布
+	AIContent  bool     `json:"ai_content,omitempty"`
 	IsOriginal bool     `json:"is_original,omitempty"` // 是否声明原创
 	Visibility string   `json:"visibility,omitempty"`  // 可见范围: "公开可见"(默认), "仅自己可见", "仅互关好友可见"
 	Products   []string `json:"products,omitempty"`    // 商品关键词列表，用于绑定带货商品
@@ -66,11 +66,13 @@ type PublishResponse struct {
 
 // PublishVideoRequest 发布视频请求（仅支持本地单个视频文件）
 type PublishVideoRequest struct {
+	Cover      string   `json:"cover,omitempty"`
 	Title      string   `json:"title" binding:"required"`
 	Content    string   `json:"content" binding:"required"`
 	Video      string   `json:"video" binding:"required"`
 	Tags       []string `json:"tags,omitempty"`
 	ScheduleAt string   `json:"schedule_at,omitempty"` // 定时发布时间，ISO8601格式，为空则立即发布
+	AIContent  bool     `json:"ai_content,omitempty"`
 	IsOriginal bool     `json:"is_original,omitempty"` // 是否声明原创
 	Visibility string   `json:"visibility,omitempty"`  // 可见范围: "公开可见"(默认), "仅自己可见", "仅互关好友可见"
 	Products   []string `json:"products,omitempty"`    // 商品关键词列表，用于绑定带货商品
@@ -249,6 +251,7 @@ func (s *XiaohongshuService) PublishContent(ctx context.Context, req *PublishReq
 		ImagePaths:   imagePaths,
 		ScheduleTime: scheduleTime,
 		IsOriginal:   req.IsOriginal,
+		AIContent:    req.AIContent,
 		Visibility:   req.Visibility,
 		Products:     req.Products,
 	}
@@ -302,8 +305,8 @@ func (s *XiaohongshuService) PublishVideo(ctx context.Context, req *PublishVideo
 	if req.Video == "" {
 		return nil, fmt.Errorf("必须提供本地视频文件")
 	}
-	if _, err := os.Stat(req.Video); err != nil {
-		return nil, fmt.Errorf("视频文件不存在或不可访问: %v", err)
+	if err := validateVideoFiles(req.Video, req.Cover); err != nil {
+		return nil, err
 	}
 
 	var scheduleTime *time.Time
@@ -336,8 +339,10 @@ func (s *XiaohongshuService) PublishVideo(ctx context.Context, req *PublishVideo
 		Content:      req.Content,
 		Tags:         req.Tags,
 		VideoPath:    req.Video,
+		CoverPath:    req.Cover,
 		ScheduleTime: scheduleTime,
 		IsOriginal:   req.IsOriginal,
+		AIContent:    req.AIContent,
 		Visibility:   req.Visibility,
 		Products:     req.Products,
 	}

@@ -314,11 +314,13 @@ func (s *AppServer) favoriteFeedHandler(c *gin.Context) {
 // healthHandler 健康检查
 func healthHandler(c *gin.Context) {
 	respondSuccess(c, map[string]any{
-		"status":    "healthy",
-		"service":   "xiaohongshu-mcp",
-		"version":   version,
-		"account":   "github.com/xpzouying/xiaohongshu-mcp",
-		"timestamp": "now",
+		"status":      "healthy",
+		"service":     "rednote-mcp",
+		"version":     version,
+		"account":     "github.com/shawn137080/xiaohongshu-mcp",
+		"platform":    "rednote",
+		"creator_url": "https://creator.rednote.com",
+		"timestamp":   "now",
 	}, "服务正常")
 }
 

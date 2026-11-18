@@ -1,50 +1,67 @@
 package xiaohongshu
 
 import (
+	"net/url"
+	"strings"
 	"time"
 
 	"github.com/go-rod/rod"
+	"github.com/go-rod/rod/lib/proto"
 	"github.com/pkg/errors"
-	"github.com/xpzouying/xiaohongshu-mcp/humanize"
 )
 
 const (
-	urlOfCreatorHome = `https://creator.xiaohongshu.com/?source=official`
-
-	creatorSessionCookie  = "galaxy_creator_session_id"
+	urlOfCreatorEntry     = "https://creator.rednote.com/publish/publish"
+	creatorUserSelector   = ".user-info .name-box"
 	creatorSessionTimeout = 15 * time.Second
 )
 
-// ensureCreatorSession 浏览器里没有创作者中心会话时，先打开创作者中心首页，等会话建立
+// ensureCreatorSession 以创作者页面确认登录，不能仅凭残留 cookie 判断。
 func ensureCreatorSession(page *rod.Page) error {
-	if hasCreatorSession(page) {
-		return nil
+	// 让浏览器日期解析与界面的北京时间标注一致。
+	if err := (proto.EmulationSetTimezoneOverride{TimezoneID: "Asia/Shanghai"}).Call(page); err != nil {
+		return errors.Wrap(err, "设置发布页面时区失败")
 	}
-
-	if err := page.Navigate(urlOfCreatorHome); err != nil {
-		return errors.Wrap(err, "打开创作者中心失败")
+	if err := page.Navigate(urlOfCreatorEntry); err != nil {
+		return errors.Wrap(err, "打开 RedNote 创作者中心失败")
 	}
-
-	deadline := time.Now().Add(creatorSessionTimeout)
-	for time.Now().Before(deadline) {
-		time.Sleep(500 * time.Millisecond)
-		if hasCreatorSession(page) {
-			humanize.Delay(page.GetContext(), humanize.AfterNavigate)
-			return nil
-		}
+	if err := page.Timeout(creatorSessionTimeout).WaitLoad(); err != nil {
+		return err
 	}
-	return errors.New("创作者中心登录失效，请重新扫码登录")
+	if _, err := page.Timeout(creatorSessionTimeout).Element(creatorUserSelector); err != nil {
+		return errors.Wrap(err, "RedNote 创作者登录失效，请重新登录")
+	}
+	ok, err := creatorLoggedIn(page)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return errors.New("未确认 RedNote 创作者登录状态")
+	}
+	return nil
 }
 
-func hasCreatorSession(page *rod.Page) bool {
-	cks, err := page.Browser().GetCookies()
+func isCreatorURL(raw string) bool {
+	u, err := url.Parse(raw)
+	return err == nil && u.Scheme == "https" && u.Host == "creator.rednote.com" && !strings.HasPrefix(u.Path, "/login")
+}
+
+func creatorLoggedIn(page *rod.Page) (bool, error) {
+	info, err := page.Info()
 	if err != nil {
-		return false
+		return false, err
 	}
-	for _, c := range cks {
-		if c.Name == creatorSessionCookie {
-			return true
-		}
+	if !isCreatorURL(info.URL) {
+		return false, nil
 	}
-	return false
+	exists, el, err := page.Has(creatorUserSelector)
+	if err != nil || !exists {
+		return false, err
+	}
+	visible, err := el.Visible()
+	if err != nil || !visible {
+		return false, err
+	}
+	name, err := el.Text()
+	return strings.TrimSpace(name) != "", err
 }

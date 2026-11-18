@@ -27,6 +27,7 @@ type PublishImageContent struct {
 	AtUsers      []string // 需要 @ 的用户昵称列表，插入在正文之后、话题之前
 	ImagePaths   []string
 	ScheduleTime *time.Time // 定时发布时间，nil 表示立即发布
+	AIContent    bool       // 笔记含 AI 合成内容
 	IsOriginal   bool       // 是否声明原创
 	Visibility   string     // 可见范围: "公开可见"(默认), "仅自己可见", "仅互关好友可见"
 	Products     []string   // 商品关键词列表，用于绑定带货商品
@@ -37,7 +38,7 @@ type PublishAction struct {
 }
 
 const (
-	urlOfPublic = `https://creator.xiaohongshu.com/publish/publish?source=official`
+	urlOfPublic = `https://creator.rednote.com/publish/publish?from=menu`
 
 	// contentElemTimeout 查找正文输入框的轮询窗口
 	contentElemTimeout = 10 * time.Second
@@ -129,9 +130,9 @@ func (p *PublishAction) Publish(ctx context.Context, content PublishImageContent
 		atUsers = atUsers[:maxAtUsers]
 	}
 
-	logrus.Infof("发布内容: title=%s, images=%v, tags=%v, at=%v, schedule=%v, original=%v, visibility=%s, products=%v", content.Title, len(content.ImagePaths), tags, atUsers, content.ScheduleTime, content.IsOriginal, content.Visibility, content.Products)
+	logrus.Infof("发布内容: title=%s, images=%v, tags=%v, at=%v, schedule=%v, original=%v, ai=%v, visibility=%s, products=%v", content.Title, len(content.ImagePaths), tags, atUsers, content.ScheduleTime, content.IsOriginal, content.AIContent, content.Visibility, content.Products)
 
-	if err := submitPublish(ctx, page, content.Title, content.Content, tags, atUsers, content.ScheduleTime, content.IsOriginal, content.Visibility, content.Products); err != nil {
+	if err := submitPublish(ctx, page, content.Title, content.Content, tags, atUsers, content.ScheduleTime, content.IsOriginal, content.AIContent, content.Visibility, content.Products); err != nil {
 		return errors.Wrap(err, "小红书发布失败")
 	}
 
@@ -382,7 +383,7 @@ func waitForUploadComplete(page *rod.Page, expectedCount int) error {
 	return errors.Errorf("第%d张图片上传超时(60s)，请检查网络连接和图片大小", expectedCount)
 }
 
-func submitPublish(ctx context.Context, page *rod.Page, title, content string, tags []string, atUsers []string, scheduleTime *time.Time, isOriginal bool, visibility string, products []string) error {
+func submitPublish(ctx context.Context, page *rod.Page, title, content string, tags []string, atUsers []string, scheduleTime *time.Time, isOriginal bool, aiContent bool, visibility string, products []string) error {
 	titleElem, err := page.Element("div.d-input input")
 	if err != nil {
 		return errors.Wrap(err, "查找标题输入框失败")
@@ -448,6 +449,12 @@ func submitPublish(ctx context.Context, page *rod.Page, title, content string, t
 		slog.Info("已声明原创")
 	}
 
+	if aiContent {
+		if err := setAIContent(page); err != nil {
+			return errors.Wrap(err, "AI 声明设置失败，中止发布")
+		}
+	}
+
 	if err := bindProducts(ctx, page, products); err != nil {
 		return errors.Wrap(err, "绑定商品失败")
 	}
@@ -461,12 +468,11 @@ func submitPublish(ctx context.Context, page *rod.Page, title, content string, t
 	return waitPublishSuccess(page, 15*time.Second)
 }
 
-// waitPublishSuccess 轮询等待发布成功的信号：小红书发布成功后会跳转离开发布表单页
-// （URL 不再含 /publish/publish）。超时仍未跳转 → 判定发布失败。
+// waitPublishSuccess 仅认可海外发布成功页或笔记管理页，登录跳转不算成功。
 func waitPublishSuccess(page *rod.Page, timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)
 	for {
-		if info, err := page.Info(); err == nil && !strings.Contains(info.URL, "/publish/publish") {
+		if info, err := page.Info(); err == nil && isPublishSuccessURL(info.URL) {
 			slog.Info("发布成功，已跳转离开发布页", "url", info.URL)
 			return nil
 		}
@@ -1505,9 +1511,18 @@ func clickScheduleSwitch(page *rod.Page) error {
 
 // setDateTime 设置日期时间
 func setDateTime(ctx context.Context, page *rod.Page, t time.Time) error {
-	dateTimeStr := t.Format("2006-01-02 15:04")
+	// 海外编辑页仍标注北京时间，不能直接填调用方的本地墙上时间。
+	pp := page.Timeout(15 * time.Second)
+	zone, err := pp.ElementR(".post-time-wrapper", "北京时间|Asia/Shanghai")
+	if err != nil {
+		return errors.Wrap(err, "无法确认定时控件时区，中止发布")
+	}
+	if err := zone.WaitVisible(); err != nil {
+		return err
+	}
+	dateTimeStr := creatorScheduleTime(t)
 
-	elem, err := page.Element(".date-picker-container input")
+	elem, err := pp.Element(".post-time-wrapper input:not([type=checkbox])")
 	if err != nil {
 		return errors.Wrap(err, "查找日期时间输入框失败")
 	}
@@ -1520,7 +1535,16 @@ func setDateTime(ctx context.Context, page *rod.Page, t time.Time) error {
 	if err := humanize.Type(ctx, elem, dateTimeStr); err != nil {
 		return errors.Wrap(err, "输入日期时间失败")
 	}
-	slog.Info("已设置日期时间", "datetime", dateTimeStr)
+	if err := page.Keyboard.Press(input.Enter); err != nil {
+		return err
+	}
+	if err := page.Keyboard.Press(input.Tab); err != nil {
+		return err
+	}
+	if err := elem.Wait(rod.Eval(`expected => this.value === expected`, dateTimeStr)); err != nil {
+		return errors.Wrap(err, "定时时间回读不一致")
+	}
+	slog.Info("已设置日期时间", "datetime", dateTimeStr, "timezone", "UTC+08:00")
 
 	return nil
 }

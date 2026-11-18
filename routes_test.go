@@ -53,11 +53,8 @@ func TestMCPStatelessSinglePost(t *testing.T) {
 	assert.NotEmpty(t, result.Result.Tools, "应返回已注册的工具")
 }
 
-// TestNotificationToolsRegistered 固定通知相关工具已注册到 MCP。
-//
-// 三个工具的注册各是 registerTools 里一段独立代码，漏掉任何一个编译都不会报错，
-// 只有真正调用时才会发现工具不存在。
-func TestNotificationToolsRegistered(t *testing.T) {
+// TestRednoteToolsRegistered 防止海外版误用大陆站工具。
+func TestRednoteToolsRegistered(t *testing.T) {
 	router := setupRoutes(NewAppServer(NewXiaohongshuService(), ""))
 	server := httptest.NewServer(router)
 	defer server.Close()
@@ -87,15 +84,15 @@ func TestNotificationToolsRegistered(t *testing.T) {
 	}
 
 	for _, want := range []string{"get_unread_count", "list_notifications", "reply_notification", "like_notification"} {
-		assert.True(t, names[want], "工具 %s 应已注册", want)
+		assert.False(t, names[want], "海外版不应暴露大陆工具 %s", want)
 	}
 }
 
-// TestNotificationRoutesRegistered 固定通知的 HTTP 路由存在。
+// TestMainlandRoutesNotRegistered 确认大陆路由不再开放。
 //
 // 读路由表而不是发请求：这些 handler 会真的起浏览器访问小红书，
 // 单测里不能碰。
-func TestNotificationRoutesRegistered(t *testing.T) {
+func TestMainlandRoutesNotRegistered(t *testing.T) {
 	router := setupRoutes(NewAppServer(NewXiaohongshuService(), ""))
 
 	registered := make(map[string]bool)
@@ -111,7 +108,7 @@ func TestNotificationRoutesRegistered(t *testing.T) {
 		"POST /api/v1/notifications/reply",
 		"POST /api/v1/notifications/like",
 	} {
-		assert.True(t, registered[want], "路由 %s 应已注册", want)
+		assert.False(t, registered[want], "海外版不应暴露大陆路由 %s", want)
 	}
 }
 
@@ -127,7 +124,7 @@ func TestProtectedRoutesRequireBearerToken(t *testing.T) {
 		{name: "health remains public", method: http.MethodGet, path: "/health", wantStatus: http.StatusOK},
 		{name: "MCP requires token", method: http.MethodPost, path: "/mcp", wantStatus: http.StatusUnauthorized},
 		{name: "MCP child path requires token", method: http.MethodPost, path: "/mcp/child", wantStatus: http.StatusUnauthorized},
-		{name: "HTTP API requires token", method: http.MethodGet, path: "/api/v1/notifications/unread", wantStatus: http.StatusUnauthorized},
+		{name: "HTTP API requires token", method: http.MethodGet, path: "/api/v1/login/status", wantStatus: http.StatusUnauthorized},
 		{name: "CORS preflight remains public", method: http.MethodOptions, path: "/mcp", wantStatus: http.StatusNoContent},
 	}
 
